@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import the same styles as company dashboard for consistency */
+@import '../../company-dashboard/src/app/globals.css';

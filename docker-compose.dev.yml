@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: practicheck-postgres
+    environment:
+      POSTGRES_DB: practicheck_dev
+      POSTGRES_USER: practicheck
+      POSTGRES_PASSWORD: dev_password_2024
+      POSTGRES_MULTIPLE_DATABASES: tenant_1,tenant_2,company_admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh
+    networks:
+      - practicheck-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U practicheck -d practicheck_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: practicheck-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - practicheck-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/services/api-gateway
+      dockerfile: Dockerfile.dev
+    container_name: practicheck-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://practicheck:dev_password_2024@postgres:5432/practicheck_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=dev_jwt_secret_key_2024_change_in_production
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend/services/api-gateway:/app
+      - ./backend/shared:/app/shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - practicheck-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Tenant Management Service
+  tenant-service:
+    build:
+      context: ./backend/services/tenant-management
+      dockerfile: Dockerfile.dev
+    container_name: practicheck-tenant-service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://practicheck:dev_password_2024@postgres:5432/practicheck_dev
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend/services/tenant-management:/app
+      - ./backend/shared:/app/shared
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - practicheck-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Authentication Service
+  auth-service:
+    build:
+      context: ./backend/services/auth-service
+      dockerfile: Dockerfile.dev
+    container_name: practicheck-auth-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://practicheck:dev_password_2024@postgres:5432/practicheck_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=dev_jwt_secret_key_2024_change_in_production
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend/services/auth-service:/app
+      - ./backend/shared:/app/shared
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - practicheck-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+  # Company Dashboard Frontend
+  company-dashboard:
+    build:
+      context: ./frontend/company-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: practicheck-company-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend/company-dashboard:/app
+      - ./frontend/shared-components:/app/shared-components
+      - /app/node_modules
+    depends_on:
+      - api-gateway
+    networks:
+      - practicheck-network
+    command: npm run dev
+
+  # University Portal Frontend
+  university-portal:
+    build:
+      context: ./frontend/university-portal
+      dockerfile: Dockerfile.dev
+    container_name: practicheck-university-portal
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend/university-portal:/app
+      - ./frontend/shared-components:/app/shared-components
+      - /app/node_modules
+    depends_on:
+      - api-gateway
+    networks:
+      - practicheck-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  practicheck-network:
+    driver: bridge
