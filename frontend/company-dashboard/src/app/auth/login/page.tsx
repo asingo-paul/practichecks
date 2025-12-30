@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Logo } from '../../../components/Logo';
 import { LoadingButton } from '../../../components/LoadingSpinner';
@@ -17,6 +17,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Force clear any existing session on component mount
+  useEffect(() => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +48,8 @@ export default function LoginPage() {
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect to dashboard
-      router.push('/dashboard');
+      // Force a page reload to ensure auth context updates
+      window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message || 'An error occurred during login');
     } finally {
@@ -177,15 +183,15 @@ export default function LoginPage() {
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="bg-white px-2 text-gray-500">Default Credentials</span>
+                <span className="bg-white px-2 text-gray-500">Secure Access</span>
               </div>
             </div>
 
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-blue-800 mb-2">Demo Login Credentials:</h4>
-              <div className="text-sm text-blue-700 space-y-1">
-                <div><strong>Email:</strong> admin@practicheck.com</div>
-                <div><strong>Password:</strong> Admin123!</div>
+              <h4 className="text-sm font-medium text-blue-800 mb-2">Admin Access:</h4>
+              <div className="text-sm text-blue-700">
+                <div>Only authorized personnel can access the management dashboard.</div>
+                <div>Contact your system administrator for credentials.</div>
               </div>
             </div>
           </div>

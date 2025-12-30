@@ -23,11 +23,19 @@ import {
   TrashIcon,
   PlayIcon,
   PauseIcon,
-  StopIcon
+  StopIcon,
+  DocumentTextIcon,
+  PaperAirplaneIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 import { LoadingSpinner, LoadingOverlay, Skeleton } from '../../components/LoadingSpinner';
 import { Logo } from '../../components/Logo';
+import { UniversityModal } from '../../components/UniversityModal';
+import { AddUniversityModal } from '../../components/AddUniversityModal';
+import { NotificationsModal } from '../../components/NotificationsModal';
+import { SessionTimeoutWarning } from '../../components/SessionTimeoutWarning';
 import { apiRequest } from '../../lib/auth';
+import { useAuth } from '../../lib/auth';
 import Link from 'next/link';
 
 // Enhanced mock data
@@ -447,7 +455,7 @@ const SystemMetricsCard: React.FC<{ metrics: any; loading: boolean }> = ({ metri
         <div className="pt-4 border-t border-gray-200 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Active Connections</span>
-            <span className="font-medium">{metrics.activeConnections.toLocaleString()}</span>
+            <span className="font-medium">{metrics.activeConnections?.toLocaleString() || '0'}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Response Time</span>
@@ -464,6 +472,7 @@ const SystemMetricsCard: React.FC<{ metrics: any; loading: boolean }> = ({ metri
 };
 
 export default function ManagementDashboard() {
+  const { user, logout, showTimeoutWarning, extendSession, timeRemaining } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(mockStats);
   const [universities, setUniversities] = useState(mockUniversities);
@@ -471,6 +480,11 @@ export default function ManagementDashboard() {
   const [systemMetrics, setSystemMetrics] = useState(mockSystemMetrics);
   const [recentActivities, setRecentActivities] = useState(mockRecentActivities);
   const [selectedTab, setSelectedTab] = useState('overview');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'view' | 'edit'>('view');
+  const [selectedUniversityId, setSelectedUniversityId] = useState<string>('');
+  const [addUniversityModalOpen, setAddUniversityModalOpen] = useState(false);
+  const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
 
   useEffect(() => {
     // Load real data from API
@@ -483,15 +497,38 @@ export default function ManagementDashboard() {
           apiRequest('/dashboard/metrics')
         ]);
 
-        setStats(statsData);
+        // Ensure stats has the expected structure
+        const safeStats = {
+          totalUniversities: statsData.totalUniversities || statsData.total_universities || 0,
+          activeStudents: statsData.activeStudents || statsData.active_students || 0,
+          activeAttachments: statsData.activeAttachments || statsData.active_attachments || 0,
+          monthlyRevenue: statsData.monthlyRevenue || statsData.monthly_revenue || 0,
+          systemHealth: statsData.systemHealth || statsData.system_health || 100,
+          monthlyGrowth: statsData.monthlyGrowth || statsData.monthly_growth || {
+            universities: 0,
+            students: 0,
+            attachments: 0,
+            revenue: 0
+          }
+        };
+
+        setStats(safeStats);
         setUniversities(universitiesData);
         setAlerts(alertsData);
         setSystemMetrics(metricsData);
       } catch (error) {
         console.error('Error loading dashboard data:', error);
-        // Fallback to mock data on error
+        // Fallback to mock data on error, but with proper UUID format
+        try {
+          const fallbackUniversities = await apiRequest('/dashboard/universities');
+          setUniversities(fallbackUniversities);
+        } catch (uniError) {
+          console.error('Error loading universities:', uniError);
+          setUniversities(mockUniversities);
+        }
+        
+        // Use mock stats with proper structure
         setStats(mockStats);
-        setUniversities(mockUniversities);
         setAlerts(mockAlerts);
         setSystemMetrics(mockSystemMetrics);
       } finally {
@@ -502,9 +539,104 @@ export default function ManagementDashboard() {
     loadData();
   }, []);
 
-  const handleUniversityAction = (action: string, university: any) => {
+  const refreshData = async () => {
+    try {
+      const [statsData, universitiesData, alertsData, metricsData] = await Promise.all([
+        apiRequest('/dashboard/stats'),
+        apiRequest('/dashboard/universities'),
+        apiRequest('/dashboard/alerts'),
+        apiRequest('/dashboard/metrics')
+      ]);
+
+      // Ensure stats has the expected structure
+      const safeStats = {
+        totalUniversities: statsData.totalUniversities || statsData.total_universities || 0,
+        activeStudents: statsData.activeStudents || statsData.active_students || 0,
+        activeAttachments: statsData.activeAttachments || statsData.active_attachments || 0,
+        monthlyRevenue: statsData.monthlyRevenue || statsData.monthly_revenue || 0,
+        systemHealth: statsData.systemHealth || statsData.system_health || 100,
+        monthlyGrowth: statsData.monthlyGrowth || statsData.monthly_growth || {
+          universities: 0,
+          students: 0,
+          attachments: 0,
+          revenue: 0
+        }
+      };
+
+      setStats(safeStats);
+      setUniversities(universitiesData);
+      setAlerts(alertsData);
+      setSystemMetrics(metricsData);
+    } catch (error) {
+      console.error('Error refreshing dashboard data:', error);
+    }
+  };
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+    // Refresh data when modal closes to show any updates
+    refreshData();
+  };
+  const handleUniversityAction = async (action: string, university: any) => {
     console.log(`Action: ${action} on university:`, university.name);
-    // Implement action handlers
+    
+    try {
+      switch (action) {
+        case 'view':
+          setSelectedUniversityId(university.id);
+          setModalMode('view');
+          setModalOpen(true);
+          break;
+          
+        case 'edit':
+          setSelectedUniversityId(university.id);
+          setModalMode('edit');
+          setModalOpen(true);
+          break;
+          
+        case 'pause':
+        case 'start':
+        case 'restart':
+          // Show loading state
+          const updatedUniversitiesBefore = universities.map(u => 
+            u.id === university.id ? { ...u, loading: true } : u
+          );
+          setUniversities(updatedUniversitiesBefore);
+
+          await apiRequest(`/dashboard/universities/${university.id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ action })
+          });
+          
+          // Refresh universities list
+          const updatedUniversities = await apiRequest('/dashboard/universities');
+          setUniversities(updatedUniversities);
+          
+          // Show success message
+          const actionMessages = {
+            pause: 'paused',
+            start: 'started',
+            restart: 'restarted'
+          };
+          alert(`University ${actionMessages[action]} successfully!`);
+          break;
+          
+        default:
+          console.log('Unknown action:', action);
+      }
+    } catch (error) {
+      console.error('Error performing university action:', error);
+      
+      // Remove loading state
+      const updatedUniversitiesError = universities.map(u => 
+        u.id === university.id ? { ...u, loading: false } : u
+      );
+      setUniversities(updatedUniversitiesError);
+      
+      // Show user-friendly error message
+      const errorMessage = error.message || 'Failed to perform action. Please try again.';
+      alert(`Error: ${errorMessage}`);
+    }
   };
 
   const handleDismissAlert = async (alertId: number) => {
@@ -513,6 +645,46 @@ export default function ManagementDashboard() {
       setAlerts(alerts.filter(alert => alert.id !== alertId));
     } catch (error) {
       console.error('Error dismissing alert:', error);
+    }
+  };
+
+  const handleBulkInvoices = async () => {
+    try {
+      const result = await apiRequest('/billing/bulk-invoices', { method: 'POST' });
+      alert(`Bulk invoices sent! ${result.message}`);
+    } catch (error) {
+      console.error('Error sending bulk invoices:', error);
+      alert('Failed to send bulk invoices. Please try again.');
+    }
+  };
+
+  const handlePaymentReminders = async () => {
+    try {
+      const result = await apiRequest('/billing/payment-reminders', { method: 'POST' });
+      alert(`Payment reminders sent! ${result.message}`);
+    } catch (error) {
+      console.error('Error sending payment reminders:', error);
+      alert('Failed to send payment reminders. Please try again.');
+    }
+  };
+
+  const handleDownloadInvoice = async (universityId: string) => {
+    try {
+      const result = await apiRequest(`/billing/invoice/${universityId}`, { method: 'POST' });
+      alert(`Invoice generated: ${result.invoice_data.invoice_number}`);
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Failed to generate invoice. Please try again.');
+    }
+  };
+
+  const handleSendInvoice = async (universityId: string) => {
+    try {
+      const result = await apiRequest(`/billing/send-invoice/${universityId}`, { method: 'POST' });
+      alert(result.message);
+    } catch (error) {
+      console.error('Error sending invoice:', error);
+      alert('Failed to send invoice. Please try again.');
     }
   };
 
@@ -543,7 +715,10 @@ export default function ManagementDashboard() {
                 <div className="h-2 w-2 rounded-full bg-green-500"></div>
                 <span className="text-sm text-gray-600">System Operational</span>
               </div>
-              <button className="relative p-2 text-gray-600 hover:text-primary-600">
+              <button 
+                className="relative p-2 text-gray-600 hover:text-primary-600"
+                onClick={() => setNotificationsModalOpen(true)}
+              >
                 <BellIcon className="h-6 w-6" />
                 {alerts.length > 0 && (
                   <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -551,8 +726,22 @@ export default function ManagementDashboard() {
                   </span>
                 )}
               </button>
-              <div className="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
-                <span className="text-sm font-medium text-white">A</span>
+              <div className="flex items-center space-x-3">
+                <div className="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
+                  <span className="text-sm font-medium text-white">
+                    {user?.name?.charAt(0).toUpperCase() || 'A'}
+                  </span>
+                </div>
+                <div className="hidden sm:block">
+                  <div className="text-sm font-medium text-gray-900">{user?.name || 'Admin'}</div>
+                  <div className="text-xs text-gray-500">{user?.email}</div>
+                </div>
+                <button
+                  onClick={logout}
+                  className="text-sm text-gray-600 hover:text-red-600 transition-colors px-3 py-1 rounded-md hover:bg-gray-100"
+                >
+                  Logout
+                </button>
               </div>
             </div>
           </div>
@@ -597,28 +786,28 @@ export default function ManagementDashboard() {
               <StatCard
                 title="Total Universities"
                 value={loading ? 0 : stats.totalUniversities}
-                change={loading ? undefined : stats.monthlyGrowth.universities}
+                change={loading ? undefined : stats.monthlyGrowth?.universities}
                 icon={BuildingOfficeIcon}
                 loading={loading}
               />
               <StatCard
                 title="Active Students"
                 value={loading ? 0 : stats.activeStudents}
-                change={loading ? undefined : stats.monthlyGrowth.students}
+                change={loading ? undefined : stats.monthlyGrowth?.students}
                 icon={UsersIcon}
                 loading={loading}
               />
               <StatCard
                 title="Active Attachments"
                 value={loading ? 0 : stats.activeAttachments}
-                change={loading ? undefined : stats.monthlyGrowth.attachments}
+                change={loading ? undefined : stats.monthlyGrowth?.attachments}
                 icon={ChartBarIcon}
                 loading={loading}
               />
               <StatCard
                 title="Monthly Revenue"
                 value={loading ? 0 : stats.monthlyRevenue}
-                change={loading ? undefined : stats.monthlyGrowth.revenue}
+                change={loading ? undefined : stats.monthlyGrowth?.revenue}
                 icon={CreditCardIcon}
                 loading={loading}
                 prefix="$"
@@ -689,7 +878,10 @@ export default function ManagementDashboard() {
                   Manage university tenants and their configurations
                 </p>
               </div>
-              <button className="btn-primary">
+              <button 
+                className="btn-primary"
+                onClick={() => setAddUniversityModalOpen(true)}
+              >
                 <PlusIcon className="h-5 w-5 mr-2" />
                 Add University
               </button>
@@ -761,11 +953,17 @@ export default function ManagementDashboard() {
 
         {selectedTab === 'billing' && (
           <>
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900">Billing & Revenue</h1>
-              <p className="mt-2 text-gray-600">
-                Track revenue, subscriptions, and billing information
-              </p>
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Billing & Revenue</h1>
+                <p className="mt-2 text-gray-600">
+                  Track revenue, subscriptions, and billing information
+                </p>
+              </div>
+              <Link href="/billing" className="btn-primary">
+                <DocumentChartBarIcon className="h-5 w-5 mr-2" />
+                Manage Billing
+              </Link>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -776,18 +974,35 @@ export default function ManagementDashboard() {
                     <p className="text-sm text-gray-500">Monthly subscription revenue</p>
                   </div>
                   <div className="space-y-4">
-                    {universities.map((university) => (
-                      <div key={university.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div>
-                          <h3 className="font-medium text-gray-900">{university.name}</h3>
-                          <p className="text-sm text-gray-500">{university.plan} Plan</p>
+                    {universities.slice(0, 5).map((university) => (
+                      <div key={university.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="font-medium text-gray-900">{university.name}</h3>
+                              <p className="text-sm text-gray-500">{university.plan} Plan</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium text-gray-900">${university.monthlyFee}/month</p>
+                              <p className="text-sm text-gray-500">{university.students} students</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-medium text-gray-900">${university.monthlyFee}/month</p>
-                          <p className="text-sm text-gray-500">{university.students} students</p>
+                        <div className="ml-4">
+                          <Link
+                            href={`/billing/${university.id}`}
+                            className="text-primary-600 hover:text-primary-900 text-sm font-medium"
+                          >
+                            View Billing →
+                          </Link>
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-4 text-center">
+                    <Link href="/billing" className="text-primary-600 hover:text-primary-500 text-sm font-medium">
+                      View All Universities →
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -809,14 +1024,49 @@ export default function ManagementDashboard() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Average per University</span>
-                      <span className="font-medium">${Math.round(stats.monthlyRevenue / universities.length).toLocaleString()}</span>
+                      <span className="font-medium">${universities.length > 0 ? Math.round(stats.monthlyRevenue / universities.length).toLocaleString() : '0'}</span>
                     </div>
                     <div className="pt-4 border-t border-gray-200">
                       <div className="flex justify-between">
                         <span className="text-sm font-medium text-gray-900">Growth Rate</span>
-                        <span className="font-medium text-green-600">+{stats.monthlyGrowth.revenue}%</span>
+                        <span className="font-medium text-green-600">+{stats.monthlyGrowth?.revenue || 0}%</span>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <div className="card mt-6">
+                  <div className="card-header">
+                    <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
+                  </div>
+                  <div className="space-y-3">
+                    <Link href="/billing" className="block w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                      <div className="flex items-center">
+                        <DocumentTextIcon className="h-5 w-5 text-gray-400 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">View All Invoices</div>
+                          <div className="text-xs text-gray-500">Manage billing history</div>
+                        </div>
+                      </div>
+                    </Link>
+                    <button className="block w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                      <div className="flex items-center">
+                        <PaperAirplaneIcon className="h-5 w-5 text-gray-400 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">Send Bulk Invoices</div>
+                          <div className="text-xs text-gray-500">Send to all universities</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button className="block w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                      <div className="flex items-center">
+                        <CurrencyDollarIcon className="h-5 w-5 text-gray-400 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">Payment Reminders</div>
+                          <div className="text-xs text-gray-500">Send overdue notices</div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -894,6 +1144,35 @@ export default function ManagementDashboard() {
           </>
         )}
       </main>
+      
+      {/* University Modal */}
+      <UniversityModal
+        isOpen={modalOpen}
+        onClose={handleModalClose}
+        universityId={selectedUniversityId}
+        mode={modalMode}
+      />
+      
+      {/* Add University Modal */}
+      <AddUniversityModal
+        isOpen={addUniversityModalOpen}
+        onClose={() => setAddUniversityModalOpen(false)}
+        onSuccess={refreshData}
+      />
+      
+      {/* Notifications Modal */}
+      <NotificationsModal
+        isOpen={notificationsModalOpen}
+        onClose={() => setNotificationsModalOpen(false)}
+      />
+      
+      {/* Session Timeout Warning */}
+      <SessionTimeoutWarning
+        isVisible={showTimeoutWarning}
+        onExtendSession={extendSession}
+        onLogout={logout}
+        timeRemaining={timeRemaining}
+      />
     </div>
   );
 }

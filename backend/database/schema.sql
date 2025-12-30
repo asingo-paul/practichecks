@@ -142,6 +142,23 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Invoices and Billing
+CREATE TABLE IF NOT EXISTS invoices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(100) UNIQUE NOT NULL,
+    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date DATE NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending', -- 'pending', 'paid', 'overdue', 'cancelled'
+    description TEXT,
+    paid_date DATE NULL,
+    payment_method VARCHAR(100) NULL,
+    payment_reference VARCHAR(255) NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Insert default subscription plans
 INSERT INTO subscription_plans (name, price_monthly, max_students, max_faculties, features) VALUES
 ('Standard', 1200.00, 500, 5, '{"basic_support": true, "email_notifications": true}'),
@@ -165,6 +182,9 @@ CREATE INDEX IF NOT EXISTS idx_system_alerts_tenant_id ON system_alerts(tenant_i
 CREATE INDEX IF NOT EXISTS idx_system_alerts_dismissed ON system_alerts(is_dismissed);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_tenant_id ON activity_logs(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_invoices_tenant_id ON invoices(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
 
 -- Enable Row Level Security for tenant isolation
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;

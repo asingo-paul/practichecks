@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChartBarIcon, 
   BuildingOfficeIcon, 
@@ -13,7 +13,8 @@ import {
   ShieldCheckIcon,
   CloudIcon,
   GlobeAltIcon,
-  CogIcon
+  CogIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { LoadingButton } from '../components/LoadingSpinner';
 import { Logo } from '../components/Logo';
@@ -81,12 +82,49 @@ const testimonials = [
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [universities, setUniversities] = useState([]);
+  const [showUniversitiesDropdown, setShowUniversitiesDropdown] = useState(false);
+
+  useEffect(() => {
+    // Fetch universities for the dropdown (public endpoint)
+    const fetchUniversities = async () => {
+      try {
+        const response = await fetch('http://localhost:8001/universities/public');
+        if (response.ok) {
+          const data = await response.json();
+          setUniversities(data);
+        } else {
+          // Fallback to mock data
+          const mockUniversities = [
+            { id: '1', name: 'University of Technology', location: 'Nairobi, Kenya', students: 245 },
+            { id: '2', name: 'State University', location: 'Mombasa, Kenya', students: 189 },
+            { id: '3', name: 'Technical College', location: 'Kisumu, Kenya', students: 156 },
+            { id: '4', name: 'Engineering Institute', location: 'Eldoret, Kenya', students: 203 }
+          ];
+          setUniversities(mockUniversities);
+        }
+      } catch (error) {
+        console.error('Error fetching universities:', error);
+        // Fallback to mock data
+        const mockUniversities = [
+          { id: '1', name: 'University of Technology', location: 'Nairobi, Kenya', students: 245 },
+          { id: '2', name: 'State University', location: 'Mombasa, Kenya', students: 189 },
+          { id: '3', name: 'Technical College', location: 'Kisumu, Kenya', students: 156 },
+          { id: '4', name: 'Engineering Institute', location: 'Eldoret, Kenya', students: 203 }
+        ];
+        setUniversities(mockUniversities);
+      }
+    };
+
+    fetchUniversities();
+  }, []);
 
   const handleGetStarted = () => {
     setIsLoading(true);
-    // Redirect to login page
+    // Show information about contacting PractiCheck
     setTimeout(() => {
-      window.location.href = '/auth/login';
+      alert('To get started with PractiCheck, please contact our sales team at sales@practicheck.com or call +254-700-000-000');
+      setIsLoading(false);
     }, 1000);
   };
 
@@ -101,6 +139,45 @@ export default function LandingPage() {
               <a href="#features" className="text-gray-600 hover:text-primary-600 transition-colors">Features</a>
               <a href="#about" className="text-gray-600 hover:text-primary-600 transition-colors">About</a>
               <a href="#testimonials" className="text-gray-600 hover:text-primary-600 transition-colors">Testimonials</a>
+              <a href="#Internships" className="text-gray-600 hover:text-primary-600 transition-colors">Internships</a>
+              
+              {/* Universities Dropdown */}
+              <div 
+                className="relative universities-dropdown"
+                onMouseEnter={() => setShowUniversitiesDropdown(true)}
+                onMouseLeave={() => setShowUniversitiesDropdown(false)}
+              >
+                <button
+                  className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
+                >
+                  Universities
+                  <ChevronDownIcon className="ml-1 h-4 w-4" />
+                </button>
+                
+                {showUniversitiesDropdown && (
+                  <div className="absolute top-full left-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="py-2">
+                      <div className="px-4 py-2 text-sm font-medium text-gray-900 border-b border-gray-200">
+                        Partner Universities
+                      </div>
+                      {universities.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 p-4">
+                          {universities.slice(0, 6).map((university) => (
+                            <div key={university.id} className="p-3 hover:bg-gray-50 rounded-lg border border-gray-100">
+                              <div className="text-sm font-medium text-gray-900 truncate">{university.name}</div>
+                              <div className="text-xs text-gray-500 truncate">{university.location}</div>
+                              <div className="text-xs text-primary-600 mt-1">{university.students} students</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-2 text-sm text-gray-500">Loading universities...</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <a href="#contact" className="text-gray-600 hover:text-primary-600 transition-colors">Contact</a>
             </nav>
             <div className="flex items-center space-x-4">
