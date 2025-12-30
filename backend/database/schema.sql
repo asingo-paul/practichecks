@@ -55,13 +55,86 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) NOT NULL, -- 'student', 'lecturer', 'supervisor', 'faculty_admin', 'university_admin'
     profile JSONB DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
+    is_password_temporary BOOLEAN DEFAULT false,
+    password_reset_token VARCHAR(255),
+    password_reset_expires TIMESTAMP WITH TIME ZONE,
     last_login TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(tenant_id, email)
 );
 
--- Students
+-- Student-specific data
+CREATE TABLE IF NOT EXISTS student_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    student_id VARCHAR(100) NOT NULL,
+    faculty VARCHAR(255),
+    program VARCHAR(255),
+    year_of_study INTEGER,
+    phone VARCHAR(20),
+    emergency_contact JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Lecturer-specific data  
+CREATE TABLE IF NOT EXISTS lecturer_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    staff_id VARCHAR(100) NOT NULL,
+    faculty VARCHAR(255),
+    department VARCHAR(255),
+    specialization VARCHAR(255),
+    phone VARCHAR(20),
+    office_location VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Supervisor-specific data (Industry supervisors)
+CREATE TABLE IF NOT EXISTS supervisor_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    company_name VARCHAR(255) NOT NULL,
+    industry VARCHAR(255),
+    position VARCHAR(255),
+    phone VARCHAR(20),
+    company_address TEXT,
+    years_experience INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Faculty Admin-specific data
+CREATE TABLE IF NOT EXISTS faculty_admin_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    staff_id VARCHAR(100) NOT NULL,
+    faculty VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    office_location VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- University Admin-specific data
+CREATE TABLE IF NOT EXISTS university_admin_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    staff_id VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    office_location VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Students (Legacy - keeping for compatibility)
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
@@ -75,7 +148,7 @@ CREATE TABLE IF NOT EXISTS students (
     UNIQUE(tenant_id, registration_number)
 );
 
--- Lecturers
+-- Lecturers (Legacy - keeping for compatibility)
 CREATE TABLE IF NOT EXISTS lecturers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
@@ -176,6 +249,12 @@ ON CONFLICT (email) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
 CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_student_profiles_user_id ON student_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_lecturer_profiles_user_id ON lecturer_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_supervisor_profiles_user_id ON supervisor_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_faculty_admin_profiles_user_id ON faculty_admin_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_university_admin_profiles_user_id ON university_admin_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_students_tenant_id ON students(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_tenant_id ON attachments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_system_alerts_tenant_id ON system_alerts(tenant_id);

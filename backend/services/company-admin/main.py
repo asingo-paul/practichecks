@@ -17,11 +17,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 import uuid
 from contextlib import asynccontextmanager
-import smtplib
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
-from email.mime.base import MimeBase
-from email import encoders
 import json
 
 # Configure logging
@@ -226,8 +221,12 @@ def validate_uuid(uuid_string: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid UUID format")
 
 def send_email(to_email: str, subject: str, body: str, html_body: str = None) -> bool:
-    """Send email using SMTP"""
+    """Send email using SMTP - simplified version"""
     try:
+        import smtplib
+        from email.mime.text import MimeText
+        from email.mime.multipart import MimeMultipart
+        
         msg = MimeMultipart('alternative')
         msg['From'] = DEFAULT_FROM_EMAIL
         msg['To'] = to_email
@@ -713,7 +712,7 @@ async def update_university_status(
             INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
             VALUES ($1, 'admin', $2, 'tenant', $3, $4)
         """, current_user['id'], f"University {action.title()}", university_id, 
-            f'{{"action": "{action}", "new_status": "{new_status}"}}')
+            json.dumps({"action": action, "new_status": new_status}))
         
         return {"message": f"University {action} successful", "new_status": new_status}
 
@@ -778,6 +777,16 @@ async def get_university_details(
                 last_sync = f"{int(time_diff.total_seconds() // 60)} minutes ago"
             else:
                 last_sync = f"{int(time_diff.total_seconds() // 3600)} hours ago"
+        # Parse settings JSON if it exists
+        settings = {}
+        if university['settings']:
+            try:
+                if isinstance(university['settings'], str):
+                    settings = json.loads(university['settings'])
+                else:
+                    settings = university['settings']
+            except (json.JSONDecodeError, TypeError):
+                settings = {}
         
         return {
             "id": str(university['id']),
@@ -792,7 +801,7 @@ async def get_university_details(
             "monthly_fee": float(university['monthly_fee'] or 0.0),
             "last_sync": last_sync,
             "created_at": university['created_at'].isoformat(),
-            "settings": university['settings'] or {},
+            "settings": settings,
             "recent_activities": [
                 {
                     "action": activity['action'],
@@ -830,7 +839,11 @@ async def update_university(
         await conn.execute("""
             INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
             VALUES ($1, 'admin', 'University Updated', 'tenant', $2, $3)
-        """, current_user['id'], university_id, f'{{"name": "{university_data.get("name")}", "location": "{university_data.get("location")}", "monthly_fee": {university_data.get("monthly_fee")}}}')
+        """, current_user['id'], university_id, json.dumps({
+            "name": university_data.get("name"), 
+            "location": university_data.get("location"), 
+            "monthly_fee": university_data.get("monthly_fee")
+        }))
         
         return {"message": "University updated successfully"}
 
@@ -859,9 +872,11 @@ async def create_university(
         await conn.execute("""
             INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
             VALUES ($1, 'admin', 'University Created', 'tenant', $2, $3)
-        """, current_user['id'], university_id, f'{{"name": "{university_data.get("name")}"}}')
+        """, current_user['id'], university_id, json.dumps({"name": university_data.get("name")}))
         
         return {"message": "University created successfully", "id": str(university_id)}
+
+@app.post("/dashboard/universities")
 async def create_university(
     university_data: dict,
     current_user: dict = Depends(get_current_user)
@@ -886,7 +901,7 @@ async def create_university(
         await conn.execute("""
             INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
             VALUES ($1, 'admin', 'University Created', 'tenant', $2, $3)
-        """, current_user['id'], university_id, f'{{"name": "{university_data.get("name")}"}}')
+        """, current_user['id'], university_id, json.dumps({"name": university_data.get("name")}))
         
         return {"message": "University created successfully", "id": str(university_id)}
 
@@ -904,7 +919,10 @@ async def get_billing_universities(current_user: dict = Depends(get_current_user
                 t.status,
                 t.monthly_fee,
                 t.created_at,
-                COALESCE(student_count.count, 0) as students
+                COALESCE(student_count.count, 0) as students,
+                COALESCE(invoice_sum.total_outstanding, 0) as outstanding_amount,
+                COALESCE(invoice_sum.total_paid, 0) as total_paid,
+                COALESCE(invoice_count.count, 0) as invoice_count
             FROM tenants t
             LEFT JOIN subscription_plans sp ON t.plan_id = sp.id
             LEFT JOIN (
@@ -912,19 +930,42 @@ async def get_billing_universities(current_user: dict = Depends(get_current_user
                 FROM students 
                 GROUP BY tenant_id
             ) student_count ON t.id = student_count.tenant_id
+            LEFT JOIN (
+                SELECT 
+                    tenant_id, 
+                    SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as total_outstanding,
+                    SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as total_paid,
+                    COUNT(*) as count
+                FROM invoices 
+                GROUP BY tenant_id
+            ) invoice_sum ON t.id = invoice_sum.tenant_id
+            LEFT JOIN (
+                SELECT tenant_id, COUNT(*) as count 
+                FROM invoices 
+                GROUP BY tenant_id
+            ) invoice_count ON t.id = invoice_count.tenant_id
             ORDER BY t.name
         """)
         
         result = []
         for uni in universities:
+            # Calculate next billing date (30 days from creation or last invoice)
+            next_billing = uni['created_at'] + timedelta(days=30) if uni['created_at'] else datetime.now() + timedelta(days=30)
+            last_billing = uni['created_at'] if uni['created_at'] else datetime.now() - timedelta(days=30)
+            
             result.append({
                 "id": str(uni['id']),
                 "name": uni['name'],
                 "location": uni['location'] or "Not specified",
                 "plan": uni['plan'] or "Standard",
                 "status": uni['status'],
-                "monthly_fee": float(uni['monthly_fee'] or 0.0),
+                "monthlyFee": float(uni['monthly_fee'] or 0.0),
                 "students": uni['students'],
+                "outstandingAmount": float(uni['outstanding_amount'] or 0.0),
+                "totalPaid": float(uni['total_paid'] or 0.0),
+                "invoiceCount": uni['invoice_count'],
+                "lastBillingDate": last_billing.strftime('%Y-%m-%d'),
+                "nextBillingDate": next_billing.strftime('%Y-%m-%d'),
                 "created_at": uni['created_at'].isoformat() if uni['created_at'] else None
             })
         
@@ -960,7 +1001,7 @@ async def generate_invoice(
         
         # Create invoice record
         invoice_id = await conn.fetchval("""
-            INSERT INTO invoices (university_id, invoice_number, amount, due_date, status)
+            INSERT INTO invoices (tenant_id, invoice_number, amount, due_date, status)
             VALUES ($1, $2, $3, $4, 'pending')
             RETURNING id
         """, university_id, invoice_data['invoice_number'], invoice_data['amount'], invoice_data['due_date'])
@@ -1287,6 +1328,17 @@ async def get_university_billing(
                 paid_date=invoice['paid_date'].strftime('%Y-%m-%d') if invoice['paid_date'] else None
             ))
         
+        # Parse settings JSON if it exists
+        settings = {}
+        if university['settings']:
+            try:
+                if isinstance(university['settings'], str):
+                    settings = json.loads(university['settings'])
+                else:
+                    settings = university['settings']
+            except (json.JSONDecodeError, TypeError):
+                settings = {}
+        
         # Format next billing date
         next_billing = (university['last_sync'] + timedelta(days=30)).strftime('%Y-%m-%d') if university['last_sync'] else '2024-02-01'
         
@@ -1300,8 +1352,8 @@ async def get_university_billing(
             total_paid=float(university['total_paid'] or 0.0),
             outstanding_amount=float(university['outstanding_amount'] or 0.0),
             next_billing_date=next_billing,
-            contact_email=university['settings'].get('contact_email', 'billing@university.edu') if university['settings'] else 'billing@university.edu',
-            billing_address=university['settings'].get('billing_address', f"{university['location']}\nBilling Department") if university['settings'] else f"{university['location']}\nBilling Department",
+            contact_email=settings.get('contact_email', 'billing@university.edu'),
+            billing_address=settings.get('billing_address', f"{university['location']}\nBilling Department"),
             billing_history=billing_history
         )
 
@@ -1531,6 +1583,45 @@ async def update_university_billing(
         """, current_user['id'], university_id, university_data)
         
         return {"message": "University billing information updated successfully"}
+
+@app.get("/billing/invoices/{university_id}")
+async def get_university_invoices(
+    university_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all invoices for a specific university"""
+    validate_uuid(university_id)
+    
+    async with db_pool.acquire() as conn:
+        invoices = await conn.fetch("""
+            SELECT 
+                id,
+                invoice_number,
+                amount,
+                status,
+                due_date,
+                invoice_date,
+                paid_date,
+                description
+            FROM invoices
+            WHERE tenant_id = $1
+            ORDER BY invoice_date DESC
+        """, university_id)
+        
+        result = []
+        for invoice in invoices:
+            result.append({
+                "id": str(invoice['id']),
+                "invoiceNumber": invoice['invoice_number'],
+                "amount": float(invoice['amount']),
+                "status": invoice['status'],
+                "dueDate": invoice['due_date'].isoformat() if invoice['due_date'] else None,
+                "createdDate": invoice['invoice_date'].isoformat() if invoice['invoice_date'] else None,
+                "paidDate": invoice['paid_date'].isoformat() if invoice['paid_date'] else None,
+                "description": invoice['description']
+            })
+        
+        return result
 
 if __name__ == "__main__":
     import uvicorn

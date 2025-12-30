@@ -1,0 +1,45 @@
+# PractiCheck Multi-Role Dashboard System Requirements
+
+## User Roles & Authentication Flow
+
+### 1. Student Login Flow
+- Click "Sign In" → Select "Student" 
+- Enter school email → Receive link to create password
+- Login with: Student ID + Password + University Selection
+- Redirected to Student Dashboard
+
+### 2. Lecturer Login Flow  
+- Click "Sign In" → Select "Lecturer"
+- Faculty Admin creates lecturer account → Sends credentials via email
+- Login with: Staff ID + Auto-generated password
+- Prompted to change password → Redirected to Lecturer Dashboard
+
+### 3. Supervisor Login Flow
+- Click "Sign In" → Select "Supervisor" 
+- Self-registration with email + industry info + custom password
+- Login with: Email + Password → Redirected to Supervisor Dashboard
+
+### 4. Faculty Admin Login Flow
+- Secret URL access only
+- University Admin creates credentials
+- Login with provided credentials → Faculty Admin Dashboard
+
+### 5. University Admin Login Flow  
+- Secret URL access only
+- Super Company Admin creates credentials
+- Login with provided credentials → University Admin Dashboard
+
+### 6. Company Admin Login Flow
+- Existing system (already implemented)
+
+## Dashboard Requirements
+- Consistent colors and responsive design across all platforms
+- Each role has specific dashboard functionality
+- Database integration for all user data
+
+## Implementation Plan
+1. Update database schema for new user types
+2. Create authentication system for each role
+3. Build individual dashboards for each role
+4. Implement registration/credential creation flows
+5. Add role-based access control

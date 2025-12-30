@@ -60,9 +60,10 @@ export default function BillingPage() {
   const filteredUniversities = universities.filter(uni => {
     const matchesSearch = uni.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          uni.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const outstandingAmount = uni.outstandingAmount || 0;
     const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'paid' && uni.outstandingAmount === 0) ||
-                         (statusFilter === 'outstanding' && uni.outstandingAmount > 0);
+                         (statusFilter === 'paid' && outstandingAmount === 0) ||
+                         (statusFilter === 'outstanding' && outstandingAmount > 0);
     return matchesSearch && matchesStatus;
   });
 
@@ -96,6 +97,54 @@ export default function BillingPage() {
       case 'Professional': return 'bg-blue-100 text-blue-800';
       case 'Standard': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleSendInvoice = async (universityId: string) => {
+    try {
+      await apiRequest(`/billing/send-invoice/${universityId}`, {
+        method: 'POST'
+      });
+      alert('Invoice sent successfully!');
+    } catch (error) {
+      console.error('Error sending invoice:', error);
+      alert('Failed to send invoice. Please try again.');
+    }
+  };
+
+  const handleDownloadInvoice = async (universityId: string) => {
+    try {
+      await apiRequest(`/billing/invoice/${universityId}`, {
+        method: 'POST'
+      });
+      alert('Invoice generated successfully!');
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Failed to generate invoice. Please try again.');
+    }
+  };
+
+  const handleBulkInvoices = async () => {
+    try {
+      const result = await apiRequest('/billing/bulk-invoices', {
+        method: 'POST'
+      });
+      alert(`Bulk invoices sent! ${result.message}`);
+    } catch (error) {
+      console.error('Error sending bulk invoices:', error);
+      alert('Failed to send bulk invoices. Please try again.');
+    }
+  };
+
+  const handlePaymentReminders = async () => {
+    try {
+      const result = await apiRequest('/billing/payment-reminders', {
+        method: 'POST'
+      });
+      alert(`Payment reminders sent! ${result.message}`);
+    } catch (error) {
+      console.error('Error sending payment reminders:', error);
+      alert('Failed to send payment reminders. Please try again.');
     }
   };
 
@@ -200,6 +249,18 @@ export default function BillingPage() {
                 <option value="paid">Paid</option>
                 <option value="outstanding">Outstanding</option>
               </select>
+              <button
+                onClick={handleBulkInvoices}
+                className="btn-primary"
+              >
+                Send Bulk Invoices
+              </button>
+              <button
+                onClick={handlePaymentReminders}
+                className="btn-outline"
+              >
+                Payment Reminders
+              </button>
             </div>
           </div>
         </div>
@@ -257,7 +318,7 @@ export default function BillingPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(university.outstandingAmount)}
+                        {getStatusBadge(university.outstandingAmount || 0)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm text-gray-900">
@@ -267,7 +328,7 @@ export default function BillingPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          ${university.outstandingAmount.toLocaleString()}
+                          ${(university.outstandingAmount || 0).toLocaleString()}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -275,13 +336,22 @@ export default function BillingPage() {
                           <Link
                             href={`/billing/${university.id}`}
                             className="text-primary-600 hover:text-primary-900"
+                            title="View Details"
                           >
                             <EyeIcon className="h-4 w-4" />
                           </Link>
-                          <button className="text-blue-600 hover:text-blue-900">
+                          <button 
+                            onClick={() => handleSendInvoice(university.id)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Send Invoice"
+                          >
                             <PaperAirplaneIcon className="h-4 w-4" />
                           </button>
-                          <button className="text-green-600 hover:text-green-900">
+                          <button 
+                            onClick={() => handleDownloadInvoice(university.id)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Download Invoice"
+                          >
                             <PencilIcon className="h-4 w-4" />
                           </button>
                         </div>

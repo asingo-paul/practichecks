@@ -960,10 +960,20 @@ export default function ManagementDashboard() {
                   Track revenue, subscriptions, and billing information
                 </p>
               </div>
-              <Link href="/billing" className="btn-primary">
-                <DocumentChartBarIcon className="h-5 w-5 mr-2" />
-                Manage Billing
-              </Link>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={handleBulkInvoices}
+                  className="btn-outline"
+                >
+                  Send Bulk Invoices
+                </button>
+                <button 
+                  onClick={handlePaymentReminders}
+                  className="btn-primary"
+                >
+                  Payment Reminders
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -975,34 +985,47 @@ export default function ManagementDashboard() {
                   </div>
                   <div className="space-y-4">
                     {universities.slice(0, 5).map((university) => (
-                      <div key={university.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="font-medium text-gray-900">{university.name}</h3>
-                              <p className="text-sm text-gray-500">{university.plan} Plan</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-medium text-gray-900">${university.monthlyFee}/month</p>
-                              <p className="text-sm text-gray-500">{university.students} students</p>
+                      <Link 
+                        key={university.id} 
+                        href={`/billing/${university.id}`}
+                        className="block"
+                      >
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-medium text-gray-900">{university.name}</h3>
+                                <p className="text-sm text-gray-500">{university.plan} Plan</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-medium text-gray-900">${university.monthlyFee}/month</p>
+                                <p className="text-sm text-gray-500">{university.students} students</p>
+                              </div>
                             </div>
                           </div>
+                          <div className="ml-4 flex space-x-2">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleDownloadInvoice(university.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 text-sm font-medium px-2 py-1 rounded hover:bg-blue-50"
+                            >
+                              Download
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSendInvoice(university.id);
+                              }}
+                              className="text-green-600 hover:text-green-900 text-sm font-medium px-2 py-1 rounded hover:bg-green-50"
+                            >
+                              Send
+                            </button>
+                          </div>
                         </div>
-                        <div className="ml-4">
-                          <Link
-                            href={`/billing/${university.id}`}
-                            className="text-primary-600 hover:text-primary-900 text-sm font-medium"
-                          >
-                            View Billing →
-                          </Link>
-                        </div>
-                      </div>
+                      </Link>
                     ))}
-                  </div>
-                  <div className="mt-4 text-center">
-                    <Link href="/billing" className="text-primary-600 hover:text-primary-500 text-sm font-medium">
-                      View All Universities →
-                    </Link>
                   </div>
                 </div>
               </div>

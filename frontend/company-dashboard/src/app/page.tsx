@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { LoadingButton } from '../components/LoadingSpinner';
 import { Logo } from '../components/Logo';
+import Link from 'next/link';
 
 const features = [
   {
@@ -181,9 +182,12 @@ export default function LandingPage() {
               <a href="#contact" className="text-gray-600 hover:text-primary-600 transition-colors">Contact</a>
             </nav>
             <div className="flex items-center space-x-4">
-              <button className="text-gray-600 hover:text-primary-600 transition-colors">
+              <Link 
+                href="/auth/role-selection" 
+                className="text-gray-600 hover:text-primary-600 transition-colors"
+              >
                 Sign In
-              </button>
+              </Link>
               <LoadingButton
                 onClick={handleGetStarted}
                 isLoading={isLoading}
