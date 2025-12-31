@@ -46,7 +46,7 @@ export default function BillingPage() {
   const loadBillingData = async () => {
     try {
       setLoading(true);
-      const data = await apiRequest('/billing/universities');
+      const data = await apiRequest('/api/admin/billing/universities');
       setUniversities(data);
     } catch (error) {
       console.error('Error loading billing data:', error);
@@ -102,7 +102,7 @@ export default function BillingPage() {
 
   const handleSendInvoice = async (universityId: string) => {
     try {
-      await apiRequest(`/billing/send-invoice/${universityId}`, {
+      await apiRequest(`/api/admin/billing/send-invoice/${universityId}`, {
         method: 'POST'
       });
       alert('Invoice sent successfully!');
@@ -114,7 +114,7 @@ export default function BillingPage() {
 
   const handleDownloadInvoice = async (universityId: string) => {
     try {
-      await apiRequest(`/billing/invoice/${universityId}`, {
+      await apiRequest(`/api/admin/billing/invoice/${universityId}`, {
         method: 'POST'
       });
       alert('Invoice generated successfully!');
@@ -126,7 +126,7 @@ export default function BillingPage() {
 
   const handleBulkInvoices = async () => {
     try {
-      const result = await apiRequest('/billing/bulk-invoices', {
+      const result = await apiRequest('/api/admin/billing/bulk-invoices', {
         method: 'POST'
       });
       alert(`Bulk invoices sent! ${result.message}`);
@@ -138,7 +138,7 @@ export default function BillingPage() {
 
   const handlePaymentReminders = async () => {
     try {
-      const result = await apiRequest('/billing/payment-reminders', {
+      const result = await apiRequest('/api/admin/billing/payment-reminders', {
         method: 'POST'
       });
       alert(`Payment reminders sent! ${result.message}`);

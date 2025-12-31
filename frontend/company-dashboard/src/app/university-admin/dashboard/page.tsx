@@ -20,31 +20,123 @@ import {
 import { Logo } from '../../../components/Logo';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
 
+interface DashboardStats {
+  total_faculties: number;
+  total_students: number;
+  total_lecturers: number;
+  total_courses: number;
+  active_attachments: number;
+  recent_activities: Array<{
+    action: string;
+    details: string;
+    time: string;
+  }>;
+}
+
+interface Faculty {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  dean_name?: string;
+  contact_email?: string;
+  phone?: string;
+  is_active: boolean;
+  admin_name?: string;
+  admin_email?: string;
+  course_count: number;
+  student_count: number;
+  lecturer_count: number;
+  created_at: string;
+}
+
 export default function UniversityAdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalFaculties: 8,
-    totalLecturers: 156,
-    totalStudents: 2450,
-    activeAttachments: 890,
-    systemHealth: 98.5,
-    monthlyBill: 2500
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [showCreateFacultyModal, setShowCreateFacultyModal] = useState(false);
+  const [createFacultyLoading, setCreateFacultyLoading] = useState(false);
 
   useEffect(() => {
     // Load user data from localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
+      fetchDashboardData();
     }
     setLoading(false);
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Fetch dashboard stats
+      const statsResponse = await fetch('http://localhost:8003/dashboard/stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData);
+      }
+
+      // Fetch faculties
+      const facultiesResponse = await fetch('http://localhost:8003/faculties', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (facultiesResponse.ok) {
+        const facultiesData = await facultiesResponse.json();
+        setFaculties(facultiesData);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/';
+  };
+
+  const handleCreateFaculty = async (formData: any) => {
+    setCreateFacultyLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8003/faculties', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Faculty created successfully! Admin email: ${result.admin_email}`);
+        setShowCreateFacultyModal(false);
+        fetchDashboardData(); // Refresh data
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      console.error('Error creating faculty:', error);
+      alert('Error creating faculty. Please try again.');
+    } finally {
+      setCreateFacultyLoading(false);
+    }
   };
 
   if (loading) {
@@ -108,24 +200,24 @@ export default function UniversityAdminDashboard() {
           <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
             <div className="flex items-center">
               <BuildingLibraryIcon className="h-4 w-4 mr-1" />
-              University of Excellence
+              {user?.university_name || 'University'}
             </div>
             <div className="flex items-center">
-              <div className={`h-2 w-2 rounded-full mr-1 ${stats.systemHealth > 95 ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-              System Health: {stats.systemHealth}%
+              <div className="h-2 w-2 rounded-full mr-1 bg-green-500"></div>
+              System Operational
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <BuildingLibraryIcon className="h-8 w-8 text-blue-600" />
               </div>
               <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.totalFaculties}</div>
+                <div className="text-2xl font-bold text-gray-900">{stats?.total_faculties || 0}</div>
                 <div className="text-sm text-gray-500">Faculties</div>
               </div>
             </div>
@@ -137,7 +229,7 @@ export default function UniversityAdminDashboard() {
                 <AcademicCapIcon className="h-8 w-8 text-green-600" />
               </div>
               <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.totalLecturers}</div>
+                <div className="text-2xl font-bold text-gray-900">{stats?.total_lecturers || 0}</div>
                 <div className="text-sm text-gray-500">Lecturers</div>
               </div>
             </div>
@@ -149,7 +241,7 @@ export default function UniversityAdminDashboard() {
                 <UsersIcon className="h-8 w-8 text-purple-600" />
               </div>
               <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.totalStudents}</div>
+                <div className="text-2xl font-bold text-gray-900">{stats?.total_students || 0}</div>
                 <div className="text-sm text-gray-500">Students</div>
               </div>
             </div>
@@ -161,8 +253,8 @@ export default function UniversityAdminDashboard() {
                 <DocumentTextIcon className="h-8 w-8 text-yellow-600" />
               </div>
               <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.activeAttachments}</div>
-                <div className="text-sm text-gray-500">Attachments</div>
+                <div className="text-2xl font-bold text-gray-900">{stats?.total_courses || 0}</div>
+                <div className="text-sm text-gray-500">Courses</div>
               </div>
             </div>
           </div>
@@ -173,86 +265,65 @@ export default function UniversityAdminDashboard() {
                 <ChartBarIcon className="h-8 w-8 text-indigo-600" />
               </div>
               <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.systemHealth}%</div>
-                <div className="text-sm text-gray-500">System Health</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BanknotesIcon className="h-8 w-8 text-emerald-600" />
-              </div>
-              <div className="ml-4">
-                <div className="text-2xl font-bold text-gray-900">${stats.monthlyBill}</div>
-                <div className="text-sm text-gray-500">Monthly Bill</div>
+                <div className="text-2xl font-bold text-gray-900">{stats?.active_attachments || 0}</div>
+                <div className="text-sm text-gray-500">Attachments</div>
               </div>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* System Overview */}
+          {/* Faculties Management */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">System Activity Overview</h3>
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Faculty Management</h3>
+                <button
+                  onClick={() => setShowCreateFacultyModal(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                >
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Add Faculty
+                </button>
               </div>
               <div className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
-                        <BuildingLibraryIcon className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Engineering Faculty</p>
-                        <p className="text-xs text-gray-500">45 new attachments approved</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500">2 hours ago</span>
+                {faculties.length === 0 ? (
+                  <div className="text-center py-8">
+                    <BuildingLibraryIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No faculties</h3>
+                    <p className="mt-1 text-sm text-gray-500">Get started by creating a new faculty.</p>
                   </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center">
-                        <UserPlusIcon className="h-4 w-4 text-white" />
+                ) : (
+                  <div className="space-y-4">
+                    {faculties.map((faculty) => (
+                      <div key={faculty.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center">
+                            <span className="text-sm font-medium text-white">
+                              {faculty.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{faculty.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {faculty.course_count} courses • {faculty.student_count} students • {faculty.lecturer_count} lecturers
+                            </p>
+                            {faculty.admin_email && (
+                              <p className="text-xs text-gray-500">Admin: {faculty.admin_email}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            faculty.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {faculty.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">New Faculty Admin</p>
-                        <p className="text-xs text-gray-500">Dr. Wanjiku added to Business Faculty</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500">4 hours ago</span>
+                    ))}
                   </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-purple-500 flex items-center justify-center">
-                        <ChartBarIcon className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Monthly Report Generated</p>
-                        <p className="text-xs text-gray-500">October 2024 university summary</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500">1 day ago</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-yellow-500 flex items-center justify-center">
-                        <CogIcon className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">System Maintenance</p>
-                        <p className="text-xs text-gray-500">Scheduled maintenance completed</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500">2 days ago</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -265,7 +336,10 @@ export default function UniversityAdminDashboard() {
                 <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
               </div>
               <div className="p-6 space-y-4">
-                <button className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+                <button 
+                  onClick={() => setShowCreateFacultyModal(true)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
+                >
                   <div className="flex items-center">
                     <UserPlusIcon className="h-5 w-5 text-gray-600 mr-3" />
                     <span className="text-sm font-medium text-gray-900">Add Faculty Admin</span>
@@ -289,104 +363,164 @@ export default function UniversityAdminDashboard() {
 
                 <button className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors">
                   <div className="flex items-center">
-                    <BanknotesIcon className="h-5 w-5 text-gray-600 mr-3" />
-                    <span className="text-sm font-medium text-gray-900">Billing & Payments</span>
+                    <UsersIcon className="h-5 w-5 text-gray-600 mr-3" />
+                    <span className="text-sm font-medium text-gray-900">Manage Students</span>
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* Recent Notifications */}
+            {/* Recent Activities */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">System Notifications</h3>
+                <h3 className="text-lg font-medium text-gray-900">Recent Activities</h3>
               </div>
               <div className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">System maintenance scheduled</p>
-                      <p className="text-xs text-gray-500">November 15, 2024 at 2:00 AM</p>
-                    </div>
+                {stats?.recent_activities && stats.recent_activities.length > 0 ? (
+                  <div className="space-y-4">
+                    {stats.recent_activities.map((activity, index) => (
+                      <div key={index} className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                            <DocumentTextIcon className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900">{activity.action}</p>
+                          <p className="text-xs text-gray-500">{activity.details}</p>
+                          <p className="text-xs text-gray-400">{new Date(activity.time).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">Monthly billing processed</p>
-                      <p className="text-xs text-gray-500">$2,500 charged successfully</p>
-                    </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-gray-500">No recent activities</p>
                   </div>
-
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <DocumentTextIcon className="h-5 w-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">University report ready</p>
-                      <p className="text-xs text-gray-500">October 2024 comprehensive report</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <UserGroupIcon className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">New faculty admin added</p>
-                      <p className="text-xs text-gray-500">Dr. Wanjiku - Business Faculty</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* University Overview */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">University Overview</h3>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">University of Excellence</p>
-                    <p className="text-xs text-gray-500">Enterprise Plan • Active</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                      <p className="text-lg font-semibold text-gray-900">{stats.totalFaculties}</p>
-                      <p className="text-xs text-gray-500">Faculties</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-gray-900">{stats.totalStudents}</p>
-                      <p className="text-xs text-gray-500">Students</p>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">System Health</span>
-                      <span className={`text-sm font-medium ${stats.systemHealth > 95 ? 'text-green-600' : 'text-yellow-600'}`}>
-                        {stats.systemHealth}%
-                      </span>
-                    </div>
-                    <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full ${stats.systemHealth > 95 ? 'bg-green-500' : 'bg-yellow-500'}`}
-                        style={{ width: `${stats.systemHealth}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Create Faculty Modal */}
+      {showCreateFacultyModal && (
+        <CreateFacultyModal
+          onClose={() => setShowCreateFacultyModal(false)}
+          onSubmit={handleCreateFaculty}
+          loading={createFacultyLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+// Create Faculty Modal Component
+function CreateFacultyModal({ onClose, onSubmit, loading }: {
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  loading: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    description: '',
+    dean_name: '',
+    contact_email: '',
+    phone: '',
+    admin_name: '',
+    admin_email: '',
+    admin_phone: ''
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div className="mt-3">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Faculty</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Faculty Name</label>
+              <input
+                type="text"
+                required
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Faculty Code</label>
+              <input
+                type="text"
+                required
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.code}
+                onChange={(e) => setFormData({...formData, code: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <textarea
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Dean Name</label>
+              <input
+                type="text"
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.dean_name}
+                onChange={(e) => setFormData({...formData, dean_name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Admin Name</label>
+              <input
+                type="text"
+                required
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.admin_name}
+                onChange={(e) => setFormData({...formData, admin_name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Admin Email</label>
+              <input
+                type="email"
+                required
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                value={formData.admin_email}
+                onChange={(e) => setFormData({...formData, admin_email: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 disabled:opacity-50"
+              >
+                {loading ? 'Creating...' : 'Create Faculty'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }

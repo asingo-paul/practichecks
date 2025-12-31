@@ -18,6 +18,10 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv("../../../.env")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -94,8 +98,8 @@ class DashboardStats(BaseModel):
     monthly_growth: dict = Field(alias="monthlyGrowth")
     
     class Config:
-        validate_by_name = True
-        by_alias = True
+        populate_by_name = True
+        
 
 class University(BaseModel):
     id: str
@@ -128,8 +132,8 @@ class SystemMetrics(BaseModel):
     response_time: float = Field(alias="responseTime")
     
     class Config:
-        validate_by_name = True
-        by_alias = True
+        populate_by_name = True
+        
 
 class BillingHistory(BaseModel):
     id: str
@@ -142,8 +146,8 @@ class BillingHistory(BaseModel):
     paid_date: Optional[str] = Field(alias="paidDate")
     
     class Config:
-        validate_by_name = True
-        by_alias = True
+        populate_by_name = True
+        
 
 class UniversityBilling(BaseModel):
     id: str
@@ -160,8 +164,8 @@ class UniversityBilling(BaseModel):
     billing_history: List[BillingHistory] = Field(alias="billingHistory")
     
     class Config:
-        validate_by_name = True
-        by_alias = True
+        populate_by_name = True
+        
 
 class BillingUniversitySummary(BaseModel):
     id: str
@@ -177,8 +181,43 @@ class BillingUniversitySummary(BaseModel):
     invoice_count: int = Field(alias="invoiceCount")
     
     class Config:
-        validate_by_name = True
-        by_alias = True
+        populate_by_name = True
+        
+
+# University Management Models
+class CreateUniversityRequest(BaseModel):
+    name: str
+    location: str
+    domain: Optional[str] = None
+    plan_id: Optional[str] = None
+    admin_name: str
+    admin_email: EmailStr
+    admin_phone: Optional[str] = None
+    admin_password: Optional[str] = None  # Optional custom password
+
+class UniversityResponse(BaseModel):
+    id: str
+    name: str
+    location: str
+    domain: Optional[str] = None
+    slug: str
+    status: str
+    health_score: float
+    monthly_fee: float
+    plan_name: Optional[str] = None
+    admin_name: Optional[str] = None
+    admin_email: Optional[str] = None
+    dashboard_url: str
+    student_count: int
+    faculty_count: int
+    created_at: str
+    last_sync: Optional[str] = None
+
+class UniversityAdminCredentials(BaseModel):
+    email: str
+    temporary_password: str
+    dashboard_url: str
+    university_name: str
 
 # Utility Functions
 def hash_password(password: str) -> str:
@@ -195,6 +234,96 @@ def create_access_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+def generate_secure_password(length: int = 12) -> str:
+    """Generate a secure random password"""
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return password
+
+def generate_university_slug(name: str) -> str:
+    """Generate URL-safe slug from university name"""
+    import re
+    slug = re.sub(r'[^a-zA-Z0-9]+', '-', name.lower())
+    return slug.strip('-')
+
+def generate_dashboard_url(slug: str) -> str:
+    """Generate university-specific dashboard URL"""
+    base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:3000")
+    return f"{base_url}/university/{slug}/dashboard"
+
+async def send_university_admin_email(admin_email: str, credentials: UniversityAdminCredentials) -> bool:
+    """Send welcome email to university admin with credentials"""
+    try:
+        import smtplib
+        import email.mime.text
+        import email.mime.multipart
+        
+        subject = f"Welcome to PractiCheck - {credentials.university_name} Admin Access"
+        
+        # Email body
+        body = f"""
+Dear Administrator,
+
+Welcome to PractiCheck! Your university admin account has been created for {credentials.university_name}.
+
+Login Details:
+- Email: {credentials.email}
+- Temporary Password: {credentials.temporary_password}
+- Dashboard URL: {credentials.dashboard_url}
+
+Please log in and change your password immediately for security.
+
+Best regards,
+PractiCheck Team
+        """
+        
+        # HTML version
+        html_body = f"""
+        <html>
+        <body>
+            <h2>Welcome to PractiCheck!</h2>
+            <p>Dear Administrator,</p>
+            <p>Your university admin account has been created for <strong>{credentials.university_name}</strong>.</p>
+            
+            <h3>Login Details:</h3>
+            <ul>
+                <li><strong>Email:</strong> {credentials.email}</li>
+                <li><strong>Temporary Password:</strong> <code>{credentials.temporary_password}</code></li>
+                <li><strong>Dashboard URL:</strong> <a href="{credentials.dashboard_url}">{credentials.dashboard_url}</a></li>
+            </ul>
+            
+            <p><strong>Important:</strong> Please log in and change your password immediately for security.</p>
+            
+            <p>Best regards,<br>PractiCheck Team</p>
+        </body>
+        </html>
+        """
+        
+        msg = email.mime.multipart.MimeMultipart('alternative')
+        msg['From'] = DEFAULT_FROM_EMAIL
+        msg['To'] = admin_email
+        msg['Subject'] = subject
+
+        text_part = email.mime.text.MimeText(body, 'plain')
+        html_part = email.mime.text.MimeText(html_body, 'html')
+        msg.attach(text_part)
+        msg.attach(html_part)
+
+        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+        if EMAIL_USE_TLS:
+            server.starttls()
+        server.login(EMAIL_HOST_USER, EMAIL_HOST_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"University admin welcome email sent to {admin_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send university admin email to {admin_email}: {e}")
+        return False
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """Verify JWT token and return user data"""
@@ -426,12 +555,12 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         }
         
         return DashboardStats(
-            total_universities=total_universities,
-            active_students=active_students,
-            active_attachments=active_attachments,
-            monthly_revenue=float(monthly_revenue),
-            system_health=float(system_health),
-            monthly_growth=monthly_growth
+            totalUniversities=total_universities,
+            activeStudents=active_students,
+            activeAttachments=active_attachments,
+            monthlyRevenue=float(monthly_revenue),
+            systemHealth=float(system_health),
+            monthlyGrowth=monthly_growth
         )
 
 @app.get("/universities/public", response_model=List[dict])
@@ -598,12 +727,12 @@ async def get_system_metrics(current_user: dict = Depends(get_current_user)):
     import random
     
     return SystemMetrics(
-        cpu_usage=round(random.uniform(45, 85), 1),
-        memory_usage=round(random.uniform(50, 90), 1),
-        disk_usage=round(random.uniform(30, 70), 1),
-        network_traffic=round(random.uniform(0.8, 2.5), 1),
-        active_connections=random.randint(800, 1500),
-        response_time=random.randint(80, 200)
+        cpuUsage=round(random.uniform(45, 85), 1),
+        memoryUsage=round(random.uniform(50, 90), 1),
+        diskUsage=round(random.uniform(30, 70), 1),
+        networkTraffic=round(random.uniform(0.8, 2.5), 1),
+        activeConnections=random.randint(800, 1500),
+        responseTime=random.randint(80, 200)
     )
 
 @app.get("/dashboard/universities", response_model=List[University])
@@ -847,63 +976,163 @@ async def update_university(
         
         return {"message": "University updated successfully"}
 
-@app.post("/dashboard/universities")
-async def create_university(
-    university_data: dict,
+@app.post("/universities", response_model=dict)
+async def create_university_with_admin(
+    university_data: CreateUniversityRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a new university tenant"""
+    """Create a new university tenant with university admin credentials"""
     async with db_pool.acquire() as conn:
-        # Get default plan
-        plan = await conn.fetchrow("SELECT id FROM subscription_plans WHERE name = 'Standard'")
-        
-        university_id = await conn.fetchval("""
-            INSERT INTO tenants (name, location, plan_id, monthly_fee)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
-        """, 
-        university_data.get('name'),
-        university_data.get('location'),
-        plan['id'],
-        university_data.get('monthly_fee', 1200.00)
-        )
-        
-        # Log activity
-        await conn.execute("""
-            INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
-            VALUES ($1, 'admin', 'University Created', 'tenant', $2, $3)
-        """, current_user['id'], university_id, json.dumps({"name": university_data.get("name")}))
-        
-        return {"message": "University created successfully", "id": str(university_id)}
+        async with conn.transaction():
+            # Generate unique slug
+            base_slug = generate_university_slug(university_data.name)
+            slug = base_slug
+            counter = 1
+            
+            while await conn.fetchval("SELECT id FROM tenants WHERE slug = $1", slug):
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            
+            # Get default plan if not specified
+            if university_data.plan_id:
+                plan = await conn.fetchrow("SELECT id, price_monthly FROM subscription_plans WHERE id = $1", university_data.plan_id)
+            else:
+                plan = await conn.fetchrow("SELECT id, price_monthly FROM subscription_plans WHERE name = 'Standard'")
+            
+            if not plan:
+                raise HTTPException(status_code=400, detail="Invalid subscription plan")
+            
+            # Create university tenant
+            university_id = await conn.fetchval("""
+                INSERT INTO tenants (name, location, domain, slug, plan_id, monthly_fee, status, health_score)
+                VALUES ($1, $2, $3, $4, $5, $6, 'active', 100.0)
+                RETURNING id
+            """, 
+            university_data.name,
+            university_data.location,
+            university_data.domain,
+            slug,
+            plan['id'],
+            plan['price_monthly']
+            )
+            
+            # Generate or use provided password for university admin
+            admin_password = university_data.admin_password or generate_secure_password()
+            password_hash = hash_password(admin_password)
+            
+            # Create university admin user
+            admin_user_id = await conn.fetchval("""
+                INSERT INTO users (tenant_id, email, password_hash, name, role, is_active, is_password_temporary)
+                VALUES ($1, $2, $3, $4, 'university_admin', true, true)
+                RETURNING id
+            """, university_id, university_data.admin_email, password_hash, university_data.admin_name)
+            
+            # Create university admin profile
+            await conn.execute("""
+                INSERT INTO university_admin_profiles (user_id, staff_id, phone, office_location)
+                VALUES ($1, $2, $3, $4)
+            """, admin_user_id, f"UA{str(university_id)[:8]}", 
+                university_data.admin_phone or '+254700000000', 
+                'Administration Office')
+            
+            # Generate dashboard URL
+            dashboard_url = generate_dashboard_url(slug)
+            
+            # Prepare credentials for email
+            credentials = UniversityAdminCredentials(
+                email=university_data.admin_email,
+                temporary_password=admin_password,
+                dashboard_url=dashboard_url,
+                university_name=university_data.name
+            )
+            
+            # Send welcome email to university admin
+            email_sent = await send_university_admin_email(university_data.admin_email, credentials)
+            
+            # Log activity
+            await conn.execute("""
+                INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
+                VALUES ($1, 'admin', 'University Created', 'tenant', $2, $3)
+            """, current_user['id'], university_id, json.dumps({
+                "name": university_data.name,
+                "slug": slug,
+                "admin_email": university_data.admin_email,
+                "admin_created": True,
+                "email_sent": email_sent
+            }))
+            
+            return {
+                "message": "University and admin created successfully",
+                "university_id": str(university_id),
+                "slug": slug,
+                "dashboard_url": dashboard_url,
+                "admin_email": university_data.admin_email,
+                "email_sent": email_sent
+            }
 
-@app.post("/dashboard/universities")
-async def create_university(
-    university_data: dict,
-    current_user: dict = Depends(get_current_user)
-):
-    """Create a new university tenant"""
+@app.get("/universities", response_model=List[UniversityResponse])
+async def get_all_universities(current_user: dict = Depends(get_current_user)):
+    """Get all universities with admin information and statistics"""
     async with db_pool.acquire() as conn:
-        # Get default plan
-        plan = await conn.fetchrow("SELECT id FROM subscription_plans WHERE name = 'Standard'")
+        universities = await conn.fetch("""
+            SELECT 
+                t.id,
+                t.name,
+                t.location,
+                t.domain,
+                t.slug,
+                t.status,
+                t.health_score,
+                t.monthly_fee,
+                t.created_at,
+                t.last_sync,
+                sp.name as plan_name,
+                u.name as admin_name,
+                u.email as admin_email,
+                COALESCE(student_count.count, 0) as student_count,
+                COALESCE(faculty_count.count, 0) as faculty_count
+            FROM tenants t
+            LEFT JOIN subscription_plans sp ON t.plan_id = sp.id
+            LEFT JOIN users u ON t.id = u.tenant_id AND u.role = 'university_admin' AND u.is_active = true
+            LEFT JOIN (
+                SELECT tenant_id, COUNT(*) as count 
+                FROM users 
+                WHERE role = 'student' AND is_active = true
+                GROUP BY tenant_id
+            ) student_count ON t.id = student_count.tenant_id
+            LEFT JOIN (
+                SELECT tenant_id, COUNT(*) as count 
+                FROM faculties 
+                WHERE is_active = true
+                GROUP BY tenant_id
+            ) faculty_count ON t.id = faculty_count.tenant_id
+            ORDER BY t.created_at DESC
+        """)
         
-        university_id = await conn.fetchval("""
-            INSERT INTO tenants (name, location, plan_id, monthly_fee)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
-        """, 
-        university_data.get('name'),
-        university_data.get('location'),
-        plan['id'],
-        university_data.get('monthly_fee', 1200.00)
-        )
+        result = []
+        for uni in universities:
+            dashboard_url = generate_dashboard_url(uni['slug']) if uni['slug'] else ""
+            
+            result.append(UniversityResponse(
+                id=str(uni['id']),
+                name=uni['name'],
+                location=uni['location'] or "Not specified",
+                domain=uni['domain'],
+                slug=uni['slug'] or "",
+                status=uni['status'],
+                health_score=float(uni['health_score'] or 100.0),
+                monthly_fee=float(uni['monthly_fee'] or 0.0),
+                plan_name=uni['plan_name'],
+                admin_name=uni['admin_name'],
+                admin_email=uni['admin_email'],
+                dashboard_url=dashboard_url,
+                student_count=uni['student_count'],
+                faculty_count=uni['faculty_count'],
+                created_at=uni['created_at'].isoformat(),
+                last_sync=uni['last_sync'].isoformat() if uni['last_sync'] else None
+            ))
         
-        # Log activity
-        await conn.execute("""
-            INSERT INTO activity_logs (user_id, user_type, action, target_type, target_id, details)
-            VALUES ($1, 'admin', 'University Created', 'tenant', $2, $3)
-        """, current_user['id'], university_id, json.dumps({"name": university_data.get("name")}))
-        
-        return {"message": "University created successfully", "id": str(university_id)}
+        return result
 
 # Billing endpoints
 @app.get("/billing/universities")
@@ -1262,13 +1491,13 @@ async def get_billing_universities(current_user: dict = Depends(get_current_user
                 name=uni['name'],
                 location=uni['location'] or "Not specified",
                 plan=uni['plan'] or "Standard",
-                monthly_fee=float(uni['monthly_fee'] or 0.0),
+                monthlyFee=float(uni['monthly_fee'] or 0.0),
                 status=uni['status'],
-                last_billing_date=last_billing,
-                next_billing_date=next_billing,
-                total_paid=float(uni['total_paid'] or 0.0),
-                outstanding_amount=float(uni['outstanding_amount'] or 0.0),
-                invoice_count=uni['invoice_count'] or 0
+                lastBillingDate=last_billing,
+                nextBillingDate=next_billing,
+                totalPaid=float(uni['total_paid'] or 0.0),
+                outstandingAmount=float(uni['outstanding_amount'] or 0.0),
+                invoiceCount=uni['invoice_count'] or 0
             ))
         
         return result
@@ -1319,13 +1548,13 @@ async def get_university_billing(
         for invoice in invoices:
             billing_history.append(BillingHistory(
                 id=str(invoice['id']),
-                invoice_number=invoice['invoice_number'],
+                invoiceNumber=invoice['invoice_number'],
                 date=invoice['invoice_date'].strftime('%Y-%m-%d'),
-                due_date=invoice['due_date'].strftime('%Y-%m-%d'),
+                dueDate=invoice['due_date'].strftime('%Y-%m-%d'),
                 amount=float(invoice['amount']),
                 status=invoice['status'],
                 description=invoice['description'],
-                paid_date=invoice['paid_date'].strftime('%Y-%m-%d') if invoice['paid_date'] else None
+                paidDate=invoice['paid_date'].strftime('%Y-%m-%d') if invoice['paid_date'] else None
             ))
         
         # Parse settings JSON if it exists
@@ -1347,14 +1576,14 @@ async def get_university_billing(
             name=university['name'],
             location=university['location'] or "Not specified",
             plan=university['plan_name'] or "Standard",
-            monthly_fee=float(university['monthly_fee'] or 0.0),
+            monthlyFee=float(university['monthly_fee'] or 0.0),
             status=university['status'],
-            total_paid=float(university['total_paid'] or 0.0),
-            outstanding_amount=float(university['outstanding_amount'] or 0.0),
-            next_billing_date=next_billing,
-            contact_email=settings.get('contact_email', 'billing@university.edu'),
-            billing_address=settings.get('billing_address', f"{university['location']}\nBilling Department"),
-            billing_history=billing_history
+            totalPaid=float(university['total_paid'] or 0.0),
+            outstandingAmount=float(university['outstanding_amount'] or 0.0),
+            nextBillingDate=next_billing,
+            contactEmail=settings.get('contact_email', 'billing@university.edu'),
+            billingAddress=settings.get('billing_address', f"{university['location']}\nBilling Department"),
+            billingHistory=billing_history
         )
 
 @app.post("/billing/universities/{university_id}/invoices")

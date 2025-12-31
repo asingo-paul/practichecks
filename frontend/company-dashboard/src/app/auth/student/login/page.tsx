@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AcademicCapIcon,
   ArrowLeftIcon,
@@ -22,11 +22,23 @@ export default function StudentLoginPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [universities, setUniversities] = useState([
-    { id: '1', name: 'University of Technology', location: 'Nairobi, Kenya' },
-    { id: '2', name: 'State University', location: 'Mombasa, Kenya' },
-    { id: '3', name: 'Technical College', location: 'Kisumu, Kenya' }
-  ]);
+  const [universities, setUniversities] = useState([]);
+
+  // Load universities on component mount
+  useEffect(() => {
+    const loadUniversities = async () => {
+      try {
+        const response = await fetch('/api/auth/universities');
+        if (response.ok) {
+          const data = await response.json();
+          setUniversities(data);
+        }
+      } catch (error) {
+        console.error('Failed to load universities:', error);
+      }
+    };
+    loadUniversities();
+  }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,10 +85,9 @@ export default function StudentLoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: form.email,
-          studentId: form.studentId,
+          student_id: form.studentId,
           password: form.password,
-          universityId: form.universityId
+          university_id: form.universityId
         })
       });
 

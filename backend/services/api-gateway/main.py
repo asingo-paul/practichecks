@@ -11,6 +11,12 @@ import time
 import logging
 from typing import Optional
 import os
+from dotenv import load_dotenv
+import httpx
+import httpx
+
+# Load environment variables from .env file
+load_dotenv("../../../.env")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -94,7 +100,202 @@ async def api_status():
         }
     }
 
-# Tenant routing middleware
+# Service URLs
+AUTH_SERVICE_URL = "http://localhost:8002"
+COMPANY_ADMIN_URL = "http://localhost:8001"
+UNIVERSITY_ADMIN_URL = "http://localhost:8003"
+FACULTY_ADMIN_URL = "http://localhost:8004"
+
+# Auth Service Proxy Routes
+@app.get("/api/auth/universities")
+async def get_universities():
+    """Get universities - proxy to auth service"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{AUTH_SERVICE_URL}/universities")
+            return response.json()
+    except httpx.RequestError as e:
+        logger.error(f"Error getting universities: {e}")
+        raise HTTPException(status_code=503, detail="Auth service unavailable")
+
+@app.api_route("/api/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_auth_service(request: Request, path: str):
+    """Proxy requests to Auth Service"""
+    try:
+        # Get request body
+        body = await request.body()
+        
+        # Prepare headers (exclude host header)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Make request to auth service
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=f"{AUTH_SERVICE_URL}/auth/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            
+        # Return response
+        return JSONResponse(
+            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error proxying to auth service: {e}")
+        raise HTTPException(status_code=503, detail="Auth service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error in auth proxy: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Company Admin Proxy Routes  
+@app.api_route("/api/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_company_admin(request: Request, path: str):
+    """Proxy requests to Company Admin Service"""
+    try:
+        # Get request body
+        body = await request.body()
+        
+        # Prepare headers (exclude host header)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Make request to company admin service
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=f"{COMPANY_ADMIN_URL}/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            
+        # Return response
+        return JSONResponse(
+            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error proxying to company admin service: {e}")
+        raise HTTPException(status_code=503, detail="Company admin service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error in admin proxy: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# University Admin Proxy Routes  
+@app.api_route("/api/university/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_university_admin(request: Request, path: str):
+    """Proxy requests to University Admin Service"""
+    try:
+        # Get request body
+        body = await request.body()
+        
+        # Prepare headers (exclude host header)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Make request to university admin service
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=f"{UNIVERSITY_ADMIN_URL}/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            
+        # Return response
+        return JSONResponse(
+            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error proxying to university admin service: {e}")
+        raise HTTPException(status_code=503, detail="University admin service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error in university admin proxy: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Faculty Admin Proxy Routes  
+@app.api_route("/api/faculty/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_faculty_admin(request: Request, path: str):
+    """Proxy requests to Faculty Admin Service"""
+    try:
+        # Get request body
+        body = await request.body()
+        
+        # Prepare headers (exclude host header)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Make request to faculty admin service
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=f"{FACULTY_ADMIN_URL}/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            
+        # Return response
+        return JSONResponse(
+            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error proxying to faculty admin service: {e}")
+        raise HTTPException(status_code=503, detail="Faculty admin service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error in faculty admin proxy: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Faculty Admin Proxy Routes  
+@app.api_route("/api/faculty/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_faculty_admin(request: Request, path: str):
+    """Proxy requests to Faculty Admin Service"""
+    try:
+        # Get request body
+        body = await request.body()
+        
+        # Prepare headers (exclude host header)
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Make request to faculty admin service
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=f"{FACULTY_ADMIN_URL}/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            
+        # Return response
+        return JSONResponse(
+            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+        
+    except httpx.RequestError as e:
+        logger.error(f"Error proxying to faculty admin service: {e}")
+        raise HTTPException(status_code=503, detail="Faculty admin service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error in faculty admin proxy: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 @app.middleware("http")
 async def tenant_routing_middleware(request: Request, call_next):
     """Route requests to appropriate tenant services"""

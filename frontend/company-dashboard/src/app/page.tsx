@@ -120,13 +120,30 @@ export default function LandingPage() {
     fetchUniversities();
   }, []);
 
-  const handleGetStarted = () => {
+  const handleGetStarted = async () => {
     setIsLoading(true);
-    // Show information about contacting PractiCheck
-    setTimeout(() => {
+    try {
+      // Check if user is logged in as company admin
+      const token = localStorage.getItem('token');
+      const user = localStorage.getItem('user');
+      
+      if (token && user) {
+        const userData = JSON.parse(user);
+        if (userData.role === 'company_admin') {
+          // Redirect to company admin dashboard
+          window.location.href = '/dashboard';
+          return;
+        }
+      }
+      
+      // Show information about contacting PractiCheck
       alert('To get started with PractiCheck, please contact our sales team at sales@practicheck.com or call +254-700-000-000');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('To get started with PractiCheck, please contact our sales team at sales@practicheck.com or call +254-700-000-000');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

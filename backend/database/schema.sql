@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE(tenant_id, email)
 );
 
+-- Add the missing column if it doesn't exist
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_password_temporary') THEN
+        ALTER TABLE users ADD COLUMN is_password_temporary BOOLEAN DEFAULT false;
+    END IF;
+END $$;
+
 -- Student-specific data
 CREATE TABLE IF NOT EXISTS student_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -132,6 +140,38 @@ CREATE TABLE IF NOT EXISTS university_admin_profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id)
+);
+
+-- University Faculties (per tenant)
+CREATE TABLE IF NOT EXISTS faculties (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(20) NOT NULL,
+    description TEXT,
+    dean_name VARCHAR(255),
+    contact_email VARCHAR(255),
+    phone VARCHAR(20),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tenant_id, code)
+);
+
+-- University Courses/Programs (per tenant and faculty)
+CREATE TABLE IF NOT EXISTS courses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    faculty_id UUID REFERENCES faculties(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(20) NOT NULL,
+    description TEXT,
+    duration_years INTEGER DEFAULT 4,
+    degree_type VARCHAR(50) DEFAULT 'Bachelor', -- 'Bachelor', 'Master', 'PhD', 'Diploma', 'Certificate'
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tenant_id, code)
 );
 
 -- Students (Legacy - keeping for compatibility)
@@ -264,6 +304,11 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created
 CREATE INDEX IF NOT EXISTS idx_invoices_tenant_id ON invoices(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
+CREATE INDEX IF NOT EXISTS idx_faculties_tenant_id ON faculties(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_faculties_code ON faculties(code);
+CREATE INDEX IF NOT EXISTS idx_courses_tenant_id ON courses(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_courses_faculty_id ON courses(faculty_id);
+CREATE INDEX IF NOT EXISTS idx_courses_code ON courses(code);
 
 -- Enable Row Level Security for tenant isolation
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;

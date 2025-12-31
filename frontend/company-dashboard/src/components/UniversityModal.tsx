@@ -37,7 +37,7 @@ export function UniversityModal({ isOpen, onClose, universityId, mode }: Univers
   const loadUniversityDetails = async () => {
     try {
       setLoading(true);
-      const data = await apiRequest(`/dashboard/universities/${universityId}`);
+      const data = await apiRequest(`/api/admin/dashboard/universities/${universityId}`);
       setUniversity(data);
       setEditData({
         name: data.name,
@@ -54,7 +54,7 @@ export function UniversityModal({ isOpen, onClose, universityId, mode }: Univers
   const handleSave = async () => {
     try {
       setSaving(true);
-      await apiRequest(`/dashboard/universities/${universityId}`, {
+      await apiRequest(`/api/admin/dashboard/universities/${universityId}`, {
         method: 'PUT',
         body: JSON.stringify(editData)
       });

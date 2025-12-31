@@ -201,3 +201,5 @@ playwright-report/
 playwright/.cache/
 
 start-backend.sh
+start-auth-service.sh
+backend/services/auth-service/venv

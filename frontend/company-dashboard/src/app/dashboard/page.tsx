@@ -491,10 +491,10 @@ export default function ManagementDashboard() {
     const loadData = async () => {
       try {
         const [statsData, universitiesData, alertsData, metricsData] = await Promise.all([
-          apiRequest('/dashboard/stats'),
-          apiRequest('/dashboard/universities'),
-          apiRequest('/dashboard/alerts'),
-          apiRequest('/dashboard/metrics')
+          apiRequest('/api/admin/dashboard/stats'),
+          apiRequest('/api/admin/dashboard/universities'),
+          apiRequest('/api/admin/dashboard/alerts'),
+          apiRequest('/api/admin/dashboard/metrics')
         ]);
 
         // Ensure stats has the expected structure
@@ -520,7 +520,7 @@ export default function ManagementDashboard() {
         console.error('Error loading dashboard data:', error);
         // Fallback to mock data on error, but with proper UUID format
         try {
-          const fallbackUniversities = await apiRequest('/dashboard/universities');
+          const fallbackUniversities = await apiRequest('/api/admin/dashboard/universities');
           setUniversities(fallbackUniversities);
         } catch (uniError) {
           console.error('Error loading universities:', uniError);
@@ -542,10 +542,10 @@ export default function ManagementDashboard() {
   const refreshData = async () => {
     try {
       const [statsData, universitiesData, alertsData, metricsData] = await Promise.all([
-        apiRequest('/dashboard/stats'),
-        apiRequest('/dashboard/universities'),
-        apiRequest('/dashboard/alerts'),
-        apiRequest('/dashboard/metrics')
+        apiRequest('/api/admin/dashboard/stats'),
+        apiRequest('/api/admin/dashboard/universities'),
+        apiRequest('/api/admin/dashboard/alerts'),
+        apiRequest('/api/admin/dashboard/metrics')
       ]);
 
       // Ensure stats has the expected structure
@@ -603,13 +603,13 @@ export default function ManagementDashboard() {
           );
           setUniversities(updatedUniversitiesBefore);
 
-          await apiRequest(`/dashboard/universities/${university.id}/status`, {
+          await apiRequest(`/api/admin/dashboard/universities/${university.id}/status`, {
             method: 'PATCH',
             body: JSON.stringify({ action })
           });
           
           // Refresh universities list
-          const updatedUniversities = await apiRequest('/dashboard/universities');
+          const updatedUniversities = await apiRequest('/api/admin/dashboard/universities');
           setUniversities(updatedUniversities);
           
           // Show success message
@@ -641,7 +641,7 @@ export default function ManagementDashboard() {
 
   const handleDismissAlert = async (alertId: number) => {
     try {
-      await apiRequest(`/dashboard/alerts/${alertId}`, { method: 'DELETE' });
+      await apiRequest(`/api/admin/dashboard/alerts/${alertId}`, { method: 'DELETE' });
       setAlerts(alerts.filter(alert => alert.id !== alertId));
     } catch (error) {
       console.error('Error dismissing alert:', error);
@@ -650,7 +650,7 @@ export default function ManagementDashboard() {
 
   const handleBulkInvoices = async () => {
     try {
-      const result = await apiRequest('/billing/bulk-invoices', { method: 'POST' });
+      const result = await apiRequest('/api/admin/billing/bulk-invoices', { method: 'POST' });
       alert(`Bulk invoices sent! ${result.message}`);
     } catch (error) {
       console.error('Error sending bulk invoices:', error);
@@ -660,7 +660,7 @@ export default function ManagementDashboard() {
 
   const handlePaymentReminders = async () => {
     try {
-      const result = await apiRequest('/billing/payment-reminders', { method: 'POST' });
+      const result = await apiRequest('/api/admin/billing/payment-reminders', { method: 'POST' });
       alert(`Payment reminders sent! ${result.message}`);
     } catch (error) {
       console.error('Error sending payment reminders:', error);
@@ -670,7 +670,7 @@ export default function ManagementDashboard() {
 
   const handleDownloadInvoice = async (universityId: string) => {
     try {
-      const result = await apiRequest(`/billing/invoice/${universityId}`, { method: 'POST' });
+      const result = await apiRequest(`/api/admin/billing/invoice/${universityId}`, { method: 'POST' });
       alert(`Invoice generated: ${result.invoice_data.invoice_number}`);
     } catch (error) {
       console.error('Error generating invoice:', error);
@@ -680,7 +680,7 @@ export default function ManagementDashboard() {
 
   const handleSendInvoice = async (universityId: string) => {
     try {
-      const result = await apiRequest(`/billing/send-invoice/${universityId}`, { method: 'POST' });
+      const result = await apiRequest(`/api/admin/billing/send-invoice/${universityId}`, { method: 'POST' });
       alert(result.message);
     } catch (error) {
       console.error('Error sending invoice:', error);

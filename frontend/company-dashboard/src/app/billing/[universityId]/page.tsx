@@ -74,7 +74,7 @@ export default function UniversityBillingPage() {
   const loadUniversityBilling = async () => {
     try {
       setLoading(true);
-      const data = await apiRequest(`/billing/universities/${universityId}`);
+      const data = await apiRequest(`/api/admin/billing/universities/${universityId}`);
       setUniversity(data);
       setEditData({
         name: data.name,
@@ -93,7 +93,7 @@ export default function UniversityBillingPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await apiRequest(`/billing/universities/${universityId}`, {
+      await apiRequest(`/api/admin/billing/universities/${universityId}`, {
         method: 'PUT',
         body: JSON.stringify(editData)
       });
@@ -113,7 +113,7 @@ export default function UniversityBillingPage() {
       const amount = university?.monthlyFee || 0;
       const description = `Monthly subscription - ${university?.plan} Plan`;
       
-      await apiRequest(`/billing/universities/${universityId}/invoices`, {
+      await apiRequest(`/api/admin/billing/universities/${universityId}/invoices`, {
         method: 'POST',
         body: JSON.stringify({ amount, description })
       });
@@ -128,7 +128,7 @@ export default function UniversityBillingPage() {
 
   const handleSendInvoice = async (invoiceId: string) => {
     try {
-      await apiRequest(`/billing/invoices/${invoiceId}/send`, {
+      await apiRequest(`/api/admin/billing/invoices/${invoiceId}/send`, {
         method: 'POST'
       });
       alert('Invoice sent successfully!');

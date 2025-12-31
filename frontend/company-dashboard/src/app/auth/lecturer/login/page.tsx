@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   UserGroupIcon,
   ArrowLeftIcon,
   KeyIcon,
-  IdentificationIcon
+  IdentificationIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from '../../../../components/Logo';
 import { LoadingButton } from '../../../../components/LoadingSpinner';
@@ -14,13 +15,31 @@ import Link from 'next/link';
 export default function LecturerLoginPage() {
   const [form, setForm] = useState({
     staffId: '',
-    password: ''
+    password: '',
+    universityId: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [universities, setUniversities] = useState([]);
+
+  // Load universities on component mount
+  useEffect(() => {
+    const loadUniversities = async () => {
+      try {
+        const response = await fetch('/api/auth/universities');
+        if (response.ok) {
+          const data = await response.json();
+          setUniversities(data);
+        }
+      } catch (error) {
+        console.error('Failed to load universities:', error);
+      }
+    };
+    loadUniversities();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,15 +51,16 @@ export default function LecturerLoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffId: form.staffId,
-          password: form.password
+          staff_id: form.staffId,
+          password: form.password,
+          university_id: form.universityId
         })
       });
 
       if (response.ok) {
         const data = await response.json();
         
-        if (data.requiresPasswordChange) {
+        if (data.user.is_password_temporary) {
           // First-time login, show password change form
           setShowPasswordChange(true);
         } else {
@@ -81,22 +101,41 @@ export default function LecturerLoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffId: form.staffId,
-          currentPassword: form.password,
-          newPassword: newPassword
+          staff_id: form.staffId,
+          current_password: form.password,
+          new_password: newPassword,
+          university_id: form.universityId
         })
       });
 
       if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        window.location.href = '/lecturer/dashboard';
+        // After password change, login again with new password
+        const loginResponse = await fetch('/api/auth/lecturer/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            staff_id: form.staffId,
+            password: newPassword,
+            university_id: form.universityId
+          })
+        });
+
+        if (loginResponse.ok) {
+          const data = await loginResponse.json();
+          localStorage.setItem('token', data.access_token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          window.location.href = '/lecturer/dashboard';
+        }
       } else {
         const errorData = await response.json();
         setError(errorData.detail || 'Failed to change password');
       }
     } catch (error) {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -148,6 +187,32 @@ export default function LecturerLoginPage() {
 
             {!showPasswordChange ? (
               <form onSubmit={handleLogin} className="space-y-6">
+                <div>
+                  <label htmlFor="universityId" className="block text-sm font-medium text-gray-700">
+                    Select University
+                  </label>
+                  <div className="mt-1 relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <select
+                      id="universityId"
+                      name="universityId"
+                      required
+                      value={form.universityId}
+                      onChange={handleInputChange}
+                      className="input-field pl-10"
+                    >
+                      <option value="">Choose your university</option>
+                      {universities.map((uni: any) => (
+                        <option key={uni.id} value={uni.id}>
+                          {uni.name} - {uni.location}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div>
                   <label htmlFor="staffId" className="block text-sm font-medium text-gray-700">
                     Staff ID
@@ -204,7 +269,7 @@ export default function LecturerLoginPage() {
                   isLoading={loading}
                   loadingText="Signing in..."
                   className="btn-primary w-full"
-                  disabled={!form.staffId || !form.password}
+                  disabled={!form.staffId || !form.password || !form.universityId}
                 >
                   Sign In
                 </LoadingButton>
