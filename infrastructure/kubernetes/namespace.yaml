@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: practicheck-prod
+  labels:
+    name: practicheck-prod
+    environment: production
+    project: practicheck
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: practicheck-staging
+  labels:
+    name: practicheck-staging
+    environment: staging
+    project: practicheck

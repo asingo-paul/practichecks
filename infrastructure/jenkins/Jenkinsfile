@@ -1,0 +1,312 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_REGION = 'us-east-1'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECS_CLUSTER = 'practicheck-prod-cluster'
+        DOCKER_BUILDKIT = '1'
+    }
+    
+    parameters {
+        choice(
+            name: 'DEPLOY_ENVIRONMENT',
+            choices: ['staging', 'prod'],
+            description: 'Environment to deploy to'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip running tests'
+        )
+        booleanParam(
+            name: 'FORCE_DEPLOY',
+            defaultValue: false,
+            description: 'Force deployment even if tests fail'
+        )
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                }
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                script {
+                    // Get AWS Account ID
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: 'aws sts get-caller-identity --query Account --output text',
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Set environment-specific variables
+                    if (params.DEPLOY_ENVIRONMENT == 'staging') {
+                        env.ECS_CLUSTER = 'practicheck-staging-cluster'
+                        env.DOMAIN_SUFFIX = 'staging'
+                    } else {
+                        env.ECS_CLUSTER = 'practicheck-prod-cluster'
+                        env.DOMAIN_SUFFIX = 'prod'
+                    }
+                }
+            }
+        }
+        
+        stage('Backend Tests') {
+            when {
+                not { params.SKIP_TESTS }
+            }
+            parallel {
+                stage('Auth Service Tests') {
+                    steps {
+                        dir('backend/services/auth-service') {
+                            sh '''
+                                python -m venv venv
+                                source venv/bin/activate
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --cov=. --cov-report=xml
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            publishCoverage adapters: [
+                                coberturaAdapter('backend/services/auth-service/coverage.xml')
+                            ], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
+                        }
+                    }
+                }
+                
+                stage('API Gateway Tests') {
+                    steps {
+                        dir('backend/services/api-gateway') {
+                            sh '''
+                                python -m venv venv
+                                source venv/bin/activate
+                                pip install -r requirements.txt
+                                python -m pytest tests/ -v --cov=. --cov-report=xml
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Frontend Tests') {
+            when {
+                not { params.SKIP_TESTS }
+            }
+            parallel {
+                stage('Company Dashboard Tests') {
+                    steps {
+                        dir('frontend/company-dashboard') {
+                            sh '''
+                                npm ci
+                                npm run test:ci
+                                npm run build
+                            '''
+                        }
+                    }
+                }
+                
+                stage('University Portal Tests') {
+                    steps {
+                        dir('frontend/university-portal') {
+                            sh '''
+                                npm ci
+                                npm run test:ci
+                                npm run build
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            parallel {
+                stage('Backend Security') {
+                    steps {
+                        sh '''
+                            # Install safety for Python security scanning
+                            pip install safety
+                            find backend -name requirements.txt -exec safety check -r {} \\;
+                        '''
+                    }
+                }
+                
+                stage('Frontend Security') {
+                    steps {
+                        sh '''
+                            # Run npm audit for frontend projects
+                            cd frontend/company-dashboard && npm audit --audit-level moderate
+                            cd ../university-portal && npm audit --audit-level moderate
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Images') {
+            parallel {
+                stage('Build Backend Services') {
+                    steps {
+                        script {
+                            def services = ['api-gateway', 'auth-service', 'tenant-service']
+                            services.each { service ->
+                                sh """
+                                    cd backend/services/${service}
+                                    docker build -t ${service}:${BUILD_TAG} .
+                                    docker tag ${service}:${BUILD_TAG} ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:${BUILD_TAG}
+                                    docker tag ${service}:${BUILD_TAG} ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:latest
+                                """
+                            }
+                        }
+                    }
+                }
+                
+                stage('Build Frontend Services') {
+                    steps {
+                        script {
+                            def services = ['company-dashboard', 'university-portal']
+                            services.each { service ->
+                                sh """
+                                    cd frontend/${service}
+                                    docker build -t ${service}:${BUILD_TAG} .
+                                    docker tag ${service}:${BUILD_TAG} ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:${BUILD_TAG}
+                                    docker tag ${service}:${BUILD_TAG} ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:latest
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                script {
+                    // Login to ECR
+                    sh 'aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}'
+                    
+                    // Push all images
+                    def services = ['api-gateway', 'auth-service', 'tenant-service', 'company-dashboard', 'university-portal']
+                    services.each { service ->
+                        sh """
+                            docker push ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:${BUILD_TAG}
+                            docker push ${ECR_REGISTRY}/practicheck-${DEPLOY_ENVIRONMENT}-${service}:latest
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to ECS') {
+            steps {
+                script {
+                    def services = [
+                        'api-gateway': 'practicheck-prod-api-gateway',
+                        'auth-service': 'practicheck-prod-auth-service',
+                        'company-dashboard': 'practicheck-prod-company-dashboard',
+                        'university-portal': 'practicheck-prod-university-portal'
+                    ]
+                    
+                    services.each { imageName, serviceName ->
+                        sh """
+                            # Update ECS service with new image
+                            aws ecs update-service \\
+                                --cluster ${ECS_CLUSTER} \\
+                                --service ${serviceName} \\
+                                --force-new-deployment \\
+                                --region ${AWS_REGION}
+                            
+                            # Wait for deployment to complete
+                            aws ecs wait services-stable \\
+                                --cluster ${ECS_CLUSTER} \\
+                                --services ${serviceName} \\
+                                --region ${AWS_REGION}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Health Check') {
+            steps {
+                script {
+                    def healthCheckUrls = [
+                        'https://practicheck.online',
+                        'https://api.practicheck.online/health'
+                    ]
+                    
+                    healthCheckUrls.each { url ->
+                        retry(5) {
+                            sh """
+                                sleep 30
+                                curl -f ${url} || exit 1
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Smoke Tests') {
+            steps {
+                sh '''
+                    # Run basic smoke tests
+                    python scripts/smoke-tests.py --environment ${DEPLOY_ENVIRONMENT}
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up Docker images
+            sh '''
+                docker system prune -f
+                docker image prune -a -f
+            '''
+            
+            // Archive test results
+            publishTestResults testResultsPattern: '**/test-results.xml'
+            
+            // Archive build artifacts
+            archiveArtifacts artifacts: 'infrastructure/terraform/*.tf', allowEmptyArchive: true
+        }
+        
+        success {
+            slackSend(
+                channel: '#deployments',
+                color: 'good',
+                message: "✅ PractiCheck deployment to ${params.DEPLOY_ENVIRONMENT} succeeded! Build: ${BUILD_TAG}"
+            )
+        }
+        
+        failure {
+            slackSend(
+                channel: '#deployments',
+                color: 'danger',
+                message: "❌ PractiCheck deployment to ${params.DEPLOY_ENVIRONMENT} failed! Build: ${BUILD_TAG}"
+            )
+        }
+        
+        unstable {
+            slackSend(
+                channel: '#deployments',
+                color: 'warning',
+                message: "⚠️ PractiCheck deployment to ${params.DEPLOY_ENVIRONMENT} is unstable! Build: ${BUILD_TAG}"
+            )
+        }
+    }
+}
