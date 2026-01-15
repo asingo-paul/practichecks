@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { LoadingButton } from '../components/LoadingSpinner';
 import { Logo } from '../components/Logo';
+import PartnersMarquee from '../components/PartnersMarquee';
 import Link from 'next/link';
 
 const features = [
@@ -157,7 +158,9 @@ export default function LandingPage() {
               <a href="#features" className="text-gray-600 hover:text-primary-600 transition-colors">Features</a>
               <a href="#about" className="text-gray-600 hover:text-primary-600 transition-colors">About</a>
               <a href="#testimonials" className="text-gray-600 hover:text-primary-600 transition-colors">Testimonials</a>
-              <a href="#Internships" className="text-gray-600 hover:text-primary-600 transition-colors">Internships</a>
+              <Link href="/internships" className="text-gray-600 hover:text-primary-600 transition-colors">
+                Internships
+              </Link>
               
               {/* Universities Dropdown */}
               <div 
@@ -263,6 +266,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Partners Marquee Section */}
+      <PartnersMarquee />
 
       {/* Features Section */}
       <section id="features" className="py-20 bg-gray-50">
@@ -375,7 +381,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/*CTA Section*/}
       <section className="bg-primary-600 py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
