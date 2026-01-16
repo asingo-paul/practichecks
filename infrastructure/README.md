@@ -11,6 +11,8 @@ practicheck.online (Main Company Dashboard)
 ```
 
 ## Infrastructure Components
+## Image Diagram
+![alt text](<Screenshot from 2026-01-16 16-12-58.png>)
 
 ### 1. Domain & DNS Configuration (Namecheap)
 - **Primary Domain**: practicheck.online
